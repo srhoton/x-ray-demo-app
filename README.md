@@ -1,40 +1,40 @@
 # AWS X-Ray Demo Application
 
-A comprehensive demonstration of AWS X-Ray distributed tracing using OpenTelemetry with a Quarkus-based Lambda function deployed behind an Application Load Balancer.
+A comprehensive demonstration of end-to-end AWS X-Ray distributed tracing from browser to backend using CloudWatch RUM, AppSync, and OpenTelemetry.
 
 ## Overview
 
-This project showcases modern AWS serverless architecture with distributed tracing:
+This project showcases modern AWS serverless architecture with complete distributed tracing:
 
+- **Frontend**: React 18 SPA with CloudWatch RUM instrumentation
+- **API Gateway**: AWS AppSync GraphQL API
+- **Resolvers**: Node.js Lambda with OpenTelemetry tracing
 - **Backend**: Quarkus Java 21 Lambda function with REST API
-- **Tracing**: OpenTelemetry integration with AWS X-Ray (NOT deprecated X-Ray SDK)
+- **Tracing**: End-to-end OpenTelemetry integration with AWS X-Ray
 - **Infrastructure**: Terraform IaC for automated deployment
-- **Integration**: ALB target group with HTTPS listener routing
+- **Hosting**: CloudFront CDN with S3, custom domain, and HTTPS
 
 ## Architecture
 
 ```
-                                    ┌─────────────────┐
-Internet ──HTTPS──> ALB (Port 443) │                 │
-                        │           │   AWS Cloud     │
-                        │           │   (us-west-2)   │
-                        ▼           │                 │
-                 Listener Rule      │                 │
-                   /api/hello       │                 │
-                        │           │                 │
-                        ▼           │                 │
-                  Target Group      │                 │
-                        │           │                 │
-                        ▼           │                 │
-              ┌─────────────────┐  │                 │
-              │ Lambda Function │  │                 │
-              │  (Java 21)      │──┼──> X-Ray        │
-              │  Quarkus        │  │                 │
-              └─────────────────┘  │                 │
-                        │           │                 │
-                        ▼           │                 │
-                CloudWatch Logs     │                 │
-                                    └─────────────────┘
+┌──────────────────────────────────────────────────────────────────┐
+│                          AWS Cloud (us-west-2)                    │
+│                                                                    │
+│  User Browser                                                      │
+│       ↓                                                           │
+│  CloudWatch RUM (captures user interactions & traces)             │
+│       ↓                                                           │
+│  CloudFront (xray.sb.fullbay.com) ──> S3 (React SPA)             │
+│       ↓                                                           │
+│  AppSync GraphQL API (X-Ray enabled)                              │
+│       ↓                                                           │
+│  Lambda Resolver (Node.js + OpenTelemetry)                        │
+│       ↓                                                           │
+│  ALB (HTTPS Listener) ──> Lambda Backend (Quarkus + OpenTelemetry)│
+│       ↓                                                           │
+│  AWS X-Ray (complete distributed trace visualization)             │
+│                                                                    │
+└──────────────────────────────────────────────────────────────────┘
 ```
 
 ## Project Structure
@@ -43,6 +43,14 @@ Internet ──HTTPS──> ALB (Port 443) │                 │
 x-ray-demo-app/
 ├── README.md                       # This file
 ├── sdlc-plan.md                    # SDLC orchestration plan
+├── x-ray-frontend/                 # React frontend application
+│   ├── src/                        # React source code
+│   ├── package.json                # Node.js dependencies
+│   └── README.md                   # Frontend documentation
+├── x-ray-resolver/                 # AppSync Lambda resolver
+│   ├── src/                        # TypeScript source code
+│   ├── package.json                # Node.js dependencies
+│   └── README.md                   # Resolver documentation
 ├── x-ray-backend/                  # Quarkus Lambda application
 │   ├── src/                        # Java source code
 │   ├── build.gradle                # Gradle build configuration
@@ -58,12 +66,14 @@ x-ray-demo-app/
 
 ### Prerequisites
 
-- Java 21
+- Node.js 18+ (for frontend and resolver)
+- Java 21 (for backend)
 - Terraform >= 1.5.0
 - AWS CLI configured with credentials
 - Existing AWS infrastructure:
   - VPC with private subnets tagged `tier=private`
   - Application Load Balancer with HTTPS listener
+  - Route53 hosted zone (sb.fullbay.com)
 
 ### 1. Build the Backend
 
@@ -95,18 +105,23 @@ terraform apply
 
 ### 3. Test the Deployment
 
+Open your browser and navigate to:
+```
+https://xray.sb.fullbay.com
+```
+
+Click the "Call getHello" button to trigger a traced request through the entire system.
+
+Alternatively, test the backend API directly:
 ```bash
-# Get the ALB DNS name from your AWS Console or:
-aws elbv2 describe-load-balancers --query 'LoadBalancers[0].DNSName'
+# Test AppSync API
+APPSYNC_URL=$(terraform output -raw appsync_api_url)
+APPSYNC_KEY=$(terraform output -raw appsync_api_key)
 
-# Test the endpoint
-curl https://<alb-dns-name>/api/hello
-
-# Expected response:
-# {
-#   "message": "Hello World",
-#   "timestamp": "2026-01-28T12:34:56.789Z"
-# }
+curl -X POST "$APPSYNC_URL" \
+  -H "x-api-key: $APPSYNC_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"query": "{ getHello { message timestamp } }"}'
 ```
 
 ### 4. View X-Ray Traces
@@ -117,6 +132,43 @@ curl https://<alb-dns-name>/api/hello
 4. Filter by service name: `x-ray-backend`
 
 ## Components
+
+### Frontend Application (`x-ray-frontend/`)
+
+A React SPA with CloudWatch RUM integration:
+
+- **UI**: Simple button interface to trigger traced requests
+- **CloudWatch RUM**: Browser-side monitoring and X-Ray integration
+- **GraphQL Client**: Direct integration with AppSync API
+- **TypeScript**: Strict type checking for reliability
+- **Testing**: Vitest unit tests
+- **Styling**: Tailwind CSS utility-first styling
+
+**Key Technologies**:
+- React 18
+- TypeScript 5.3
+- Vite 5.0
+- AWS CloudWatch RUM Web SDK
+- Tailwind CSS 3.4
+
+**See**: [x-ray-frontend/README.md](x-ray-frontend/README.md)
+
+### AppSync Resolver (`x-ray-resolver/`)
+
+A Node.js Lambda resolver for AppSync:
+
+- **GraphQL Resolution**: Handles AppSync query resolution
+- **OpenTelemetry**: Propagates X-Ray traces
+- **HTTP Client**: Calls backend Lambda via ALB
+- **TypeScript**: Type-safe GraphQL operations
+
+**Key Technologies**:
+- Node.js 20
+- TypeScript
+- OpenTelemetry SDK
+- AWS SDK v3
+
+**See**: [x-ray-resolver/README.md](x-ray-resolver/README.md)
 
 ### Backend Application (`x-ray-backend/`)
 
@@ -139,20 +191,24 @@ A Quarkus-based Lambda function with:
 
 ### Infrastructure (`terraform/`)
 
-Terraform configuration for AWS deployment:
+Terraform configuration for complete AWS deployment:
 
-- **Lambda Function**: Java 21 runtime, 1GB memory, VPC integration
-- **IAM Roles**: Execution role with X-Ray permissions
+- **Frontend Hosting**: S3 bucket, CloudFront distribution, Route53 DNS
+- **SSL/TLS**: ACM certificate for HTTPS
+- **CloudWatch RUM**: App monitor and Cognito identity pool
+- **AppSync API**: GraphQL API with Lambda data source
+- **Lambda Functions**: Resolver and backend with VPC integration
+- **IAM Roles**: Least-privilege execution roles
 - **ALB Integration**: Target group and listener rule
-- **Security Groups**: VPC networking for Lambda
-- **Monitoring**: CloudWatch Logs integration
-- **Data Sources**: Automatic lookup of existing VPC, ALB, subnets
+- **Security**: Security groups, bucket policies, OAI
+- **Monitoring**: CloudWatch Logs and X-Ray tracing
 
 **Key Features**:
-- Automated build and deployment
+- Automated React build and deployment
+- CloudFront cache invalidation
+- DNS certificate validation
+- X-Ray tracing throughout
 - Configurable via variables
-- Health checks and monitoring
-- X-Ray tracing configuration
 
 **See**: [terraform/README.md](terraform/README.md)
 

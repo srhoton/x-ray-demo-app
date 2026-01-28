@@ -1,229 +1,272 @@
-# SDLC Plan: AWS X-Ray Demo Application (Backend + AppSync Resolver)
+# SDLC Plan: AWS X-Ray Demo Application - React Frontend with CloudWatch RUM
 
 ## Status: In Progress
 ## Created: 2026-01-28
-## Last Updated: 2026-01-28T12:00:00Z
+## Last Updated: 2026-01-28T16:00:00Z
 
-## Original Requests
+## Original Request
 
-### Phase 1 (Complete)
-> Build a demo set of applications for AWS X-Ray. First, build the backend service - a Quarkus-based Java application that does simple gets for basic information. No backend needed, can return just a "hello world" response. Needs to sit behind an existing ALB and VPC, accept ALB-based event types. Service instrumented with AWS X-Ray SDK for Java using OpenTelemetry X-ray implementation (NOT deprecated X-ray SDK). Java application in x-ray-backend folder as Lambda with target group for ALB. Terraform in separate terraform directory to deploy Lambda with existing ALB and VPC. Deploy to us-west-2.
-
-### Phase 2 (Current)
-> Create a folder called `x-ray-resolver` containing an AppSync Lambda resolver that will hit the ALB endpoint built previously. It needs to use AWS X-Ray to trace requests from AppSync to the ALB and back, using OpenTelemetry X-Ray configuration (NOT the deprecated AWS X-Ray SDK).
+> Build a simple React UI that is instrumented with AWS CloudWatch RUM, so that the UI is fully integrated with the tracing functionality already built. It needs:
 >
-> Context from Phase 1:
-> - Repository contains `x-ray-backend/` - Quarkus Java 21 Lambda behind an ALB with endpoint `/api/hello`
-> - Repository contains `terraform/` - Terraform infrastructure including ALB, VPC, and Lambda configuration
-> - ALB ARN: arn:aws:elasticloadbalancing:us-west-2:345594586248:loadbalancer/app/external-private-alb/720e2b5474d3d602
-> - ALB DNS: external-private-alb-984336828.us-west-2.elb.amazonaws.com
-> - VPC ID: vpc-03163f35ccd0fc6a9
-> - Region: us-west-2
-> - Existing Lambda uses OpenTelemetry with X-Ray
+> 1. **React Application**:
+>    - A simple UI with a button that calls the AppSync backend's `getHello` endpoint
+>    - Instrumented with AWS CloudWatch RUM for distributed tracing
+>    - Should NOT use AWS Amplify
+>    - Should use the existing AppSync API that was already built in this project
+>
+> 2. **Infrastructure (Terraform)**:
+>    - CloudFront distribution for serving the React app
+>    - S3 bucket for static hosting
+>    - ACM certificate for HTTPS
+>    - Route53 subdomain: `xray.sb.fullbay.com`
+>    - The domain `sb.fullbay.com` is already set up in Route53 - just need to look up that zone and create the subdomain
+>    - CloudWatch RUM App Monitor configuration
+>    - All infrastructure should be added to the existing terraform deployment in the `terraform/` directory
+>    - The React application should also be deployed by Terraform
+>
+> 3. **Tracing Integration**:
+>    - CloudWatch RUM should be configured to propagate X-Ray traces to the AppSync backend
+>    - This will complete the end-to-end tracing: UI → AppSync → Resolver Lambda → Backend Lambda
+>
+> Key constraints:
+> - No AWS Amplify
+> - Use existing terraform deployment structure
+> - React app should be simple and focused (just a button to call getHello)
+> - Domain must be xray.sb.fullbay.com
 
 ## Clarifications
 
-### Phase 1 Clarifications (Complete)
-- **Existing ALB and VPC**: Reference by ARNs/IDs, use data sources
-- **Subnets**: Private subnets with tag pair key="tier", value="private"
-- **Security Groups**: Create new ones
-- **ALB Listener**: Use existing HTTPS listener, create new rule
-- **Java Runtime**: Java 21
-- **Memory/Timeout**: 1GB memory, 1 minute timeout
-- **Environment variables**: None needed yet (beyond X-Ray config)
-- **API Endpoint**: /api/hello
-- **Response Format**: JSON
-- **Authentication**: None for now
-- **Sampling Rate**: Default X-Ray sampling
-- **Tracing Mode**: PassThrough
-- **State Backend**: Local Terraform state
-- **Deployment**: Include build in Terraform
-
-### Phase 2 Clarifications (Current)
-- **AppSync API**: Create a NEW AppSync API, adding to existing terraform in `terraform/` directory
-- **GraphQL Schema**: Simple `getHello: HelloResponse` query carrying ALB response to demonstrate X-Ray tracing
-- **ALB Access**: Lambda will be in same VPC (vpc-03163f35ccd0fc6a9), using ALB DNS name (external-private-alb-984336828.us-west-2.elb.amazonaws.com)
-- **TLS Validation**: Not a concern - cert is ACM-issued
-- **Authentication**: Not required yet
-- **X-Ray Tracing**: YES - propagate X-Ray trace context from AppSync to ALB, create subsegments
-- **Language**: TypeScript - deployable via Terraform in `terraform/` directory
-- **Error Handling**: Return GraphQL errors
-- **Response**: Pass through backend response as-is
+### Confirmed Configuration
+- **CloudWatch RUM App Monitor**: 100% session sampling rate (capture all sessions for demo)
+- **ACM Certificate**: Specific to `xray.sb.fullbay.com` (not wildcard)
+- **S3 Bucket Naming**: `xray-demo-frontend-<account-id>`
+- **CloudFront Distribution**: Basic setup, no special security headers
+- **React Build Process**: Terraform triggers React build automatically during apply
+- **Environment Variables**: Build-time configuration (AppSync URL/key baked into bundle)
+- **Route53 Zone**: Existing zone ID: Z00265943SONMGC7WELPH (sb.fullbay.com)
+- **AppSync API**: Already deployed at https://ju4yjdc2incctntbc3lvlq4fdi.appsync-api.us-west-2.amazonaws.com/graphql
 
 ## Architecture Overview
 
-### Phase 1 Architecture (Complete)
-This system consists of a single serverless backend component deployed to AWS Lambda, fronted by an existing Application Load Balancer. The Lambda function is built with Quarkus and instrumented with OpenTelemetry to send traces to AWS X-Ray.
+This phase adds a React frontend application with AWS CloudWatch RUM instrumentation to complete the end-to-end distributed tracing demonstration.
 
-**Flow**: HTTPS Request → Existing ALB → HTTPS Listener Rule → Target Group → Lambda Function → X-Ray
+### Complete System Architecture
 
-**Key Technologies**:
-- **Runtime**: Java 21 with Quarkus framework
-- **Deployment**: AWS Lambda with ALB target group
-- **Tracing**: OpenTelemetry with AWS X-Ray exporter
-- **Infrastructure**: Terraform for IaC
-- **Build**: Gradle 8.x with Quarkus plugin
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                         AWS Cloud (us-west-2)                    │
+│                                                                   │
+│  ┌───────────────────────────────────────────────────────────┐  │
+│  │ CloudFront Distribution (xray.sb.fullbay.com)             │  │
+│  │   ├─ ACM Certificate (HTTPS)                              │  │
+│  │   ├─ CloudWatch RUM (X-Ray Integration)                   │  │
+│  │   └─ Origin: S3 Static Website                            │  │
+│  └────────────────────┬──────────────────────────────────────┘  │
+│                       │                                           │
+│  ┌────────────────────▼──────────────────────────────────────┐  │
+│  │ S3 Bucket (Static Website Hosting)                        │  │
+│  │   ├─ React SPA Build Artifacts                            │  │
+│  │   ├─ CloudWatch RUM Web Client                            │  │
+│  │   └─ index.html, bundle.js, assets/                       │  │
+│  └───────────────────────────────────────────────────────────┘  │
+│                                                                   │
+│  User → CloudFront → S3 → React App (Browser)                    │
+│                                  │                                │
+│                                  ▼                                │
+│  ┌───────────────────────────────────────────────────────────┐  │
+│  │ CloudWatch RUM App Monitor                                │  │
+│  │   ├─ Session Recording                                    │  │
+│  │   ├─ Performance Metrics                                  │  │
+│  │   ├─ X-Ray Trace Propagation                              │  │
+│  │   └─ Error Tracking                                       │  │
+│  └────────────────────┬──────────────────────────────────────┘  │
+│                       │                                           │
+│                       ▼                                           │
+│  ┌───────────────────────────────────────────────────────────┐  │
+│  │ AWS AppSync GraphQL API                                   │  │
+│  │   ├─ X-Ray Tracing Enabled                                │  │
+│  │   ├─ API Key Authentication                               │  │
+│  │   └─ Query: getHello                                      │  │
+│  └────────────────────┬──────────────────────────────────────┘  │
+│                       │                                           │
+│                       ▼                                           │
+│  ┌───────────────────────────────────────────────────────────┐  │
+│  │ Lambda Resolver (TypeScript/Node.js 20)                   │  │
+│  │   ├─ OpenTelemetry X-Ray Tracing                          │  │
+│  │   └─ Calls Backend via ALB                                │  │
+│  └────────────────────┬──────────────────────────────────────┘  │
+│                       │                                           │
+│                       ▼                                           │
+│  ┌───────────────────────────────────────────────────────────┐  │
+│  │ Application Load Balancer                                 │  │
+│  │   ├─ HTTPS Listener                                       │  │
+│  │   └─ Path: /api/hello                                     │  │
+│  └────────────────────┬──────────────────────────────────────┘  │
+│                       │                                           │
+│                       ▼                                           │
+│  ┌───────────────────────────────────────────────────────────┐  │
+│  │ Lambda Backend (Quarkus/Java 21)                          │  │
+│  │   ├─ OpenTelemetry X-Ray Tracing                          │  │
+│  │   └─ Returns: { message, timestamp }                      │  │
+│  └───────────────────────────────────────────────────────────┘  │
+│                                                                   │
+│  ┌───────────────────────────────────────────────────────────┐  │
+│  │ AWS X-Ray                                                 │  │
+│  │   └─ Complete Distributed Trace:                          │  │
+│  │      UI → AppSync → Resolver → ALB → Backend              │  │
+│  └───────────────────────────────────────────────────────────┘  │
+└───────────────────────────────────────────────────────────────────┘
+```
 
-### Phase 2 Architecture (Current)
-This phase adds an AWS AppSync GraphQL API with a Lambda resolver that calls the existing ALB-backed Quarkus service. The entire request flow is traced using AWS X-Ray with OpenTelemetry instrumentation.
+### Request Flow with Tracing
 
-**Request Flow:**
-1. Client → AppSync GraphQL API (`getHello` query)
-2. AppSync → Lambda Resolver (TypeScript with OpenTelemetry X-Ray)
-3. Lambda → ALB → Backend Lambda (Quarkus with OpenTelemetry X-Ray)
-4. Backend responds → ALB → Resolver Lambda
-5. Resolver Lambda → AppSync → Client
+1. **User Interaction**: User clicks button on React UI
+2. **CloudWatch RUM**: Captures user interaction, starts trace segment
+3. **GraphQL Request**: React app sends GraphQL query to AppSync
+4. **AppSync**: Receives request, propagates X-Ray trace context
+5. **Lambda Resolver**: Receives AppSync event with trace context
+6. **HTTP Call to ALB**: Resolver makes HTTPS request with X-Ray headers
+7. **Backend Lambda**: Processes request, returns response
+8. **Trace Aggregation**: All segments sent to X-Ray for visualization
 
-**X-Ray Tracing:**
-- AppSync automatically creates X-Ray trace segments
-- Resolver Lambda propagates trace context using OpenTelemetry with X-Ray propagator
-- HTTP client includes X-Ray trace headers when calling ALB
-- Backend Lambda receives and continues the trace
-- Complete distributed trace visible in X-Ray console
+### Key Technologies
 
-**Key Technologies**:
-- **Runtime**: Node.js 20.x with TypeScript
-- **GraphQL API**: AWS AppSync with schema-first design
-- **Resolver**: Direct Lambda resolver
-- **Tracing**: OpenTelemetry with AWS X-Ray SDK for JavaScript
-- **HTTP Client**: Node.js https module with X-Ray instrumentation
-- **Infrastructure**: Terraform for IaC
-- **Build**: npm/esbuild for bundling
+**Frontend:**
+- React 18 (functional components, hooks)
+- TypeScript (strict mode)
+- Vite (build tool)
+- AWS CloudWatch RUM Web Client SDK
+- GraphQL (AppSync client)
+- Tailwind CSS (styling)
+
+**Infrastructure:**
+- AWS S3 (static website hosting)
+- AWS CloudFront (CDN and HTTPS)
+- AWS ACM (SSL/TLS certificate)
+- AWS Route53 (DNS)
+- AWS CloudWatch RUM (monitoring and tracing)
+- Terraform (infrastructure as code)
+
+**Integration:**
+- CloudWatch RUM X-Ray integration
+- AppSync GraphQL API (existing)
+- OpenTelemetry trace propagation
 
 ## Components
 
-### Phase 1 Components (Complete)
-
-### Component: Quarkus Backend Application
-- **Type**: backend
-- **Technology**: Java 21 / Quarkus / Gradle
-- **Subagent**: java-quarkus-agent
+### Component: React Frontend Application
+- **Type**: frontend
+- **Technology**: React 18 / TypeScript / Vite / Tailwind CSS
+- **Subagent**: react-agent
 - **Status**: Approved
-- **Dependencies**: None (standalone)
-- **Description**: Quarkus-based Lambda function that accepts ALB events, returns JSON response, and sends traces to X-Ray via OpenTelemetry
+- **Dependencies**: None (can be implemented first)
+- **Description**: Simple React SPA with a button to call AppSync `getHello` query. Instrumented with CloudWatch RUM Web Client SDK for distributed tracing. Uses functional components, TypeScript, and Vite for build. Styled with Tailwind CSS.
 - **Files**:
-  - `x-ray-backend/build.gradle` ✓
-  - `x-ray-backend/settings.gradle` ✓
-  - `x-ray-backend/gradle.properties` ✓
-  - `x-ray-backend/src/main/java/com/example/xray/HelloResource.java` ✓
-  - `x-ray-backend/src/main/java/com/example/xray/model/HelloResponse.java` ✓
-  - `x-ray-backend/src/main/resources/application.properties` ✓
-  - `x-ray-backend/src/test/java/com/example/xray/HelloResourceTest.java` ✓
-  - `x-ray-backend/README.md` ✓
-  - `x-ray-backend/gradlew` ✓
-  - `x-ray-backend/gradlew.bat` ✓
-  - `x-ray-backend/gradle/wrapper/gradle-wrapper.properties` ✓
-  - `x-ray-backend/gradle/wrapper/gradle-wrapper.jar` ✓
-- **Review History**:
-  - 2026-01-28 Implementation: Complete - All files created, tests passing, Spotless formatting applied
-
-### Component: Terraform Infrastructure
-- **Type**: infrastructure
-- **Technology**: Terraform / AWS
-- **Subagent**: terraform-agent
-- **Status**: Approved
-- **Dependencies**: Quarkus Backend Application (needs built JAR)
-- **Description**: Terraform configuration to deploy Lambda function, create target group, attach to existing ALB HTTPS listener, configure security groups, IAM roles, and X-Ray permissions
-- **Files**:
-  - `terraform/main.tf` ✓
-  - `terraform/variables.tf` ✓
-  - `terraform/outputs.tf` ✓
-  - `terraform/versions.tf` ✓
-  - `terraform/data.tf` ✓
-  - `terraform/lambda.tf` ✓
-  - `terraform/alb.tf` ✓
-  - `terraform/security.tf` ✓
-  - `terraform/README.md` ✓
-  - `terraform/.gitignore` ✓
-  - `terraform/terraform.tfvars.example` ✓
-- **Review History**:
-  - 2026-01-28 Implementation: Complete - All files created, terraform validate passed, terraform fmt applied
-
-### Phase 2 Components (Current)
-
-### Component: TypeScript Lambda Resolver
-- **Type**: backend
-- **Technology**: TypeScript (Node.js 20.x)
-- **Subagent**: typescript-agent
-- **Status**: Approved
-- **Dependencies**: None (can be implemented in parallel with infrastructure)
-- **Description**: TypeScript Lambda function that serves as AppSync resolver. Makes HTTPS request to ALB endpoint, propagates X-Ray trace context using OpenTelemetry, handles errors, and returns GraphQL-formatted responses.
-- **Files**:
-  - `x-ray-resolver/src/index.ts` ✓
-  - `x-ray-resolver/src/types.ts` ✓
-  - `x-ray-resolver/src/tracing.ts` ✓
-  - `x-ray-resolver/src/client.ts` ✓
-  - `x-ray-resolver/package.json` ✓
-  - `x-ray-resolver/tsconfig.json` ✓
-  - `x-ray-resolver/README.md` ✓
-  - `x-ray-resolver/.gitignore` ✓
-  - `x-ray-resolver/vitest.config.ts` ✓
-  - `x-ray-resolver/src/__tests__/index.test.ts` ✓
-  - `x-ray-resolver/dist/function.zip` ✓
-- **Review History**:
-  - 2026-01-28 Implementation: Complete - All files created, tests passing (100% coverage on handler), build successful
-
-### Component: AppSync GraphQL API Infrastructure
-- **Type**: infrastructure
-- **Technology**: Terraform (AWS AppSync, CloudWatch, IAM)
-- **Subagent**: terraform-agent
-- **Status**: Pending
-- **Dependencies**: TypeScript Lambda Resolver (needs deployment package reference)
-- **Description**: Creates AppSync GraphQL API with schema, CloudWatch logging, and IAM roles. Defines `getHello` query that returns HelloResponse type. Links to Lambda resolver.
-- **Files**:
-  - `terraform/appsync.tf` - AppSync API, schema, data source, resolver, CloudWatch logs
-  - `terraform/outputs.tf` - Add AppSync API outputs (API URL, API ID)
-  - `terraform/variables.tf` - Add AppSync-specific variables
+  - `x-ray-frontend/package.json` - Dependencies, scripts, project metadata
+  - `x-ray-frontend/tsconfig.json` - TypeScript configuration (strict mode)
+  - `x-ray-frontend/vite.config.ts` - Vite build configuration
+  - `x-ray-frontend/tailwind.config.js` - Tailwind CSS configuration
+  - `x-ray-frontend/postcss.config.js` - PostCSS configuration for Tailwind
+  - `x-ray-frontend/index.html` - HTML entry point
+  - `x-ray-frontend/src/main.tsx` - React app entry point
+  - `x-ray-frontend/src/App.tsx` - Main app component
+  - `x-ray-frontend/src/components/HelloButton.tsx` - Button component that calls AppSync
+  - `x-ray-frontend/src/services/appsync.ts` - AppSync GraphQL client
+  - `x-ray-frontend/src/services/rum.ts` - CloudWatch RUM initialization
+  - `x-ray-frontend/src/types/index.ts` - TypeScript type definitions
+  - `x-ray-frontend/src/config.ts` - Configuration (AppSync URL, RUM config)
+  - `x-ray-frontend/src/index.css` - Global styles with Tailwind directives
+  - `x-ray-frontend/.gitignore` - Git ignore file
+  - `x-ray-frontend/README.md` - Frontend documentation
+  - `x-ray-frontend/vitest.config.ts` - Test configuration
+  - `x-ray-frontend/src/__tests__/App.test.tsx` - Component tests
 - **Review History**: None yet
 
-### Component: Lambda Resolver Infrastructure
+### Component: CloudWatch RUM Infrastructure
 - **Type**: infrastructure
-- **Technology**: Terraform (Lambda, IAM, CloudWatch)
+- **Technology**: Terraform (CloudWatch RUM, IAM)
 - **Subagent**: terraform-agent
 - **Status**: Pending
-- **Dependencies**: TypeScript Lambda Resolver (needs deployment package)
-- **Description**: Terraform resources for deploying TypeScript Lambda resolver. Includes Lambda function, execution role with X-Ray permissions, VPC configuration, environment variables for ALB endpoint, and CloudWatch log group.
+- **Dependencies**: None (can be implemented in parallel)
+- **Description**: Creates CloudWatch RUM App Monitor with X-Ray integration. Configures identity pool for anonymous access from the React app. Sets up IAM roles and policies for RUM data collection.
 - **Files**:
-  - `terraform/resolver-lambda.tf` - Lambda function, IAM role, permissions, build process
-  - `terraform/outputs.tf` - Add resolver Lambda outputs
+  - `terraform/rum.tf` - CloudWatch RUM App Monitor, Cognito Identity Pool, IAM roles
+  - `terraform/variables.tf` - Add RUM-specific variables (app monitor name, sampling rate)
+  - `terraform/outputs.tf` - Add RUM outputs (monitor ID, identity pool ID, region)
+- **Review History**: None yet
+
+### Component: Frontend Hosting Infrastructure
+- **Type**: infrastructure
+- **Technology**: Terraform (S3, CloudFront, ACM, Route53)
+- **Subagent**: terraform-agent
+- **Status**: Pending
+- **Dependencies**: React Frontend Application (needs build artifacts), CloudWatch RUM Infrastructure (needs RUM config)
+- **Description**: Creates S3 bucket for static website hosting, CloudFront distribution with custom domain, ACM certificate for HTTPS, and Route53 DNS record. Implements Terraform-based build and deployment process for React app. Configures CloudFront to serve React SPA with proper routing.
+- **Files**:
+  - `terraform/frontend.tf` - S3 bucket, CloudFront distribution, bucket policies
+  - `terraform/acm.tf` - ACM certificate for xray.sb.fullbay.com
+  - `terraform/route53.tf` - Route53 record for subdomain
+  - `terraform/variables.tf` - Add frontend-specific variables (domain name, bucket name)
+  - `terraform/outputs.tf` - Add frontend outputs (CloudFront URL, S3 bucket name)
+  - `terraform/data.tf` - Add Route53 zone data source
+- **Review History**: None yet
+
+### Component: Frontend Deployment Process
+- **Type**: infrastructure
+- **Technology**: Terraform (null_resource, local-exec)
+- **Subagent**: terraform-agent
+- **Status**: Pending
+- **Dependencies**: React Frontend Application (needs source code), Frontend Hosting Infrastructure (needs S3 bucket)
+- **Description**: Automates React build process and deployment to S3 using Terraform. Configures runtime environment variables for AppSync and RUM. Invalidates CloudFront cache after deployment.
+- **Files**:
+  - `terraform/frontend-deploy.tf` - Build process, S3 sync, CloudFront invalidation
 - **Review History**: None yet
 
 ## Implementation Order
 
-### Phase 1 (Complete)
-1. **Quarkus Backend Application** - Must be built first to produce the Lambda deployment JAR that Terraform will deploy
-   - Reason: Terraform depends on the built artifact
+This project has clear dependencies that require sequential implementation for infrastructure components, but the React app can be developed in parallel with RUM infrastructure.
 
-2. **Terraform Infrastructure** - Deploy after backend is built and tested locally
-   - Reason: Requires the JAR file from component 1
+### Phase 1: Frontend Development (Parallel)
+1. **React Frontend Application** - Develop first as it's independent. Creates the UI and integration with AppSync.
+   - Reason: Can be developed and tested independently with mock data
+   - No dependencies on infrastructure being deployed
 
-### Phase 2 (Current)
-1. **TypeScript Lambda Resolver** - Implement first as it's independent. Creates the deployment package needed by infrastructure.
-   - Reason: Can be developed and tested independently
+2. **CloudWatch RUM Infrastructure** - Can be created in parallel with React development
+   - Reason: Independent of other infrastructure, just needs to exist before frontend deployment
+   - Provides credentials and config that React app needs
 
-2. **Lambda Resolver Infrastructure** - Terraform resources for deploying the resolver Lambda
-   - Reason: Depends on TypeScript code being written (for build process)
+### Phase 2: Hosting Infrastructure (Sequential)
+3. **ACM Certificate** - Must be created first as CloudFront depends on it
+   - Reason: Certificate validation can take time, CloudFront needs valid cert
+   - No dependencies
 
-3. **AppSync GraphQL API Infrastructure** - Creates AppSync API and links to resolver Lambda
-   - Reason: Depends on resolver Lambda infrastructure being defined
+4. **Frontend Hosting Infrastructure** - S3 and CloudFront distribution
+   - Reason: Depends on ACM certificate being validated
+   - Needs React build artifacts to exist (but not deployed yet)
 
-Note: TypeScript and Terraform work can proceed in parallel since the AppSync infrastructure will reference the Lambda by name/ARN patterns.
+5. **Route53 DNS** - Can be created after CloudFront distribution exists
+   - Reason: Needs CloudFront distribution domain name
+   - Completes the custom domain setup
+
+### Phase 3: Deployment (Sequential)
+6. **Frontend Deployment Process** - Build and deploy React app to S3
+   - Reason: Needs S3 bucket to exist, needs RUM config from infrastructure
+   - Final step that makes everything live
+
+**Note**: React development (1) and RUM infrastructure (2) can proceed in parallel. Once both are complete, we proceed sequentially through hosting infrastructure (3-5) and finally deployment (6).
 
 ## Commits
 
-### Phase 1 (Complete - Not Yet Committed)
-- [ ] Quarkus Backend Application: Add Quarkus Lambda backend with OpenTelemetry X-Ray instrumentation
-- [ ] Terraform Infrastructure: Add Terraform configuration for Lambda deployment with ALB integration
-
-### Phase 2 (Current)
-- [ ] TypeScript Lambda Resolver: Add AppSync Lambda resolver with OpenTelemetry X-Ray tracing
-- [ ] Terraform Infrastructure: Add AppSync API and resolver Lambda infrastructure with X-Ray
+- [ ] React Frontend Application: Add React UI with CloudWatch RUM instrumentation
+- [ ] CloudWatch RUM Infrastructure: Add CloudWatch RUM App Monitor with X-Ray integration
+- [ ] Frontend Hosting Infrastructure: Add S3, CloudFront, ACM, and Route53 for frontend hosting
+- [ ] Frontend Deployment Process: Add automated React build and deployment to S3
 
 ## Current Phase
 
 **Phase**: 2-Implementation
-**Current Component**: TypeScript Lambda Resolver
-**Current Action**: Creating formal SDLC plan document, about to dispatch to typescript-agent
+**Current Component**: React Frontend Application
+**Current Action**: Dispatching to react-agent to implement React UI with CloudWatch RUM
 
 ## Error Log
 
