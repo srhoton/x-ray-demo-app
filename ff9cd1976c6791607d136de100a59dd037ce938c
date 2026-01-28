@@ -1,0 +1,33 @@
+Session prompts from Claude Code:
+
+1. User: 'ok, run the terraform and troubleshoot any errors'
+   - Ran terraform init and apply, deployment successful with 19 resources
+
+2. User reported RUM credential error: 'Unhandled Promise Rejection: Error: CWR: Failed to retrieve credentials for Cognito identity'
+   - Fixed by enabling classic flow in Cognito Identity Pool
+   - Fixed by using app_monitor_id instead of id for RUM App ID
+   - Fixed by adding guestRoleArn to SDK configuration
+
+3. User: 'I do see a RUM session come through, although I don't see it tied to the API Trace'
+   - Fixed by adding addXRayTraceIdHeader: true and urlsToInclude config
+
+4. User: 'can you have the quality reviewer subagent look over the codebase one more time?'
+   - Ran code-quality-reviewer subagent
+   - Identified Critical (2), High (5), Medium (7), Low priority issues
+
+5. User: 'fix the critical and high errors please'
+   - Fixed SSL certificate validation (re-enabled for internal VPC)
+   - Fixed TypeScript linting errors with proper env var typing
+   - Added ESLint configuration for resolver project
+   - Rewrote stale resolver tests
+   - Added Java tests for AlbLambdaHandler (8 tests)
+   - Removed stale HelloResourceTest
+
+6. User: 'ok, please redeploy all the components'
+   - Built Java backend, TypeScript resolver
+   - Ran terraform apply successfully
+
+7. User reported error: 'Cannot return null for non-nullable type: String within parent HelloResponse (/getHello/timestamp)'
+   - Fixed by re-enabling rejectUnauthorized: false for internal ALB SSL
+
+8. User: '/trueup' - commit, add notes, push, create PR
