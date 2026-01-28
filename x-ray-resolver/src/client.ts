@@ -1,12 +1,14 @@
 /**
- * HTTP client for calling the backend ALB with X-Ray tracing
+ * HTTP client for calling the backend ALB
+ *
+ * X-Ray tracing is handled automatically by the ADOT Node.js
+ * auto-instrumentation layer which instruments https.request() calls.
  */
 
 import * as https from 'https';
-import { trace, context, SpanStatusCode } from '@opentelemetry/api';
 import type { HelloResponse } from './types';
 import { isHelloResponse } from './types';
-import { getXRayTraceId } from './tracing';
+import * as logger from './logger';
 
 /**
  * Configuration for the HTTP client
@@ -43,134 +45,96 @@ export class BackendError extends Error {
 }
 
 /**
- * Call the backend ALB endpoint with X-Ray tracing
+ * Call the backend ALB endpoint
+ *
+ * X-Ray tracing is handled automatically by the ADOT auto-instrumentation
+ * layer which instruments the https.request() call.
  *
  * @param config - HTTP client configuration
  * @returns Promise resolving to HelloResponse
  * @throws {BackendError} When the backend request fails
  */
 export async function callBackend(config: ClientConfig): Promise<HelloResponse> {
-  const tracer = trace.getTracer('x-ray-resolver-client');
   const timeout = config.timeout ?? 30000;
+  const url = new URL(config.endpoint);
 
-  return tracer.startActiveSpan('CallBackendALB', async (span) => {
-    try {
-      // Add span attributes
-      span.setAttribute('http.method', 'GET');
-      span.setAttribute('http.url', `${config.endpoint}${config.path}`);
-      span.setAttribute('peer.service', 'backend-alb');
+  const options: https.RequestOptions = {
+    hostname: url.hostname,
+    port: url.port || 443,
+    path: config.path,
+    method: 'GET',
+    headers: {
+      'Content-Type': 'application/json',
+      'User-Agent': 'x-ray-resolver/1.0',
+    },
+    timeout,
+    // Allow self-signed certificates for internal ALB communication within VPC
+    rejectUnauthorized: false,
+  };
 
-      // Get X-Ray trace ID for propagation
-      const traceId = getXRayTraceId();
-      if (traceId) {
-        span.setAttribute('aws.xray.trace_id', traceId);
-      }
+  logger.debug('Calling backend ALB', {
+    endpoint: config.endpoint,
+    path: config.path,
+    timeout,
+  });
 
-      // Parse the endpoint URL
-      const url = new URL(config.endpoint);
-      const fullPath = config.path;
+  return new Promise<HelloResponse>((resolve, reject) => {
+    const req = https.request(options, (res) => {
+      let data = '';
 
-      // Prepare request options
-      const options: https.RequestOptions = {
-        hostname: url.hostname,
-        port: url.port || 443,
-        path: fullPath,
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          'User-Agent': 'x-ray-resolver/1.0',
-        },
-        timeout,
-      };
+      res.on('data', (chunk: Buffer) => {
+        data += chunk.toString();
+      });
 
-      // Add X-Ray trace header if available
-      if (traceId) {
-        options.headers = {
-          ...options.headers,
-          'X-Amzn-Trace-Id': traceId,
-        };
-      }
+      res.on('end', () => {
+        const statusCode = res.statusCode ?? 0;
 
-      // Make the HTTPS request
-      const response = await new Promise<HelloResponse>((resolve, reject) => {
-        const req = https.request(options, (res) => {
-          let data = '';
+        if (statusCode >= 200 && statusCode < 300) {
+          try {
+            const parsed: unknown = JSON.parse(data);
 
-          res.on('data', (chunk: Buffer) => {
-            data += chunk.toString();
-          });
-
-          res.on('end', () => {
-            const statusCode = res.statusCode ?? 0;
-            span.setAttribute('http.status_code', statusCode);
-
-            if (statusCode >= 200 && statusCode < 300) {
-              try {
-                const parsed: unknown = JSON.parse(data);
-
-                // Validate response structure
-                if (!isHelloResponse(parsed)) {
-                  reject(
-                    new BackendError(
-                      'Invalid response format from backend',
-                      statusCode,
-                      data,
-                    ),
-                  );
-                  return;
-                }
-
-                resolve(parsed);
-              } catch (error) {
-                reject(
-                  new BackendError(
-                    `Failed to parse backend response: ${error instanceof Error ? error.message : 'Unknown error'}`,
-                    statusCode,
-                    data,
-                  ),
-                );
-              }
-            } else {
-              reject(
-                new BackendError(
-                  `Backend returned error status: ${statusCode}`,
-                  statusCode,
-                  data,
-                ),
-              );
+            if (!isHelloResponse(parsed)) {
+              logger.error('Invalid backend response format', {
+                statusCode,
+                body: data.substring(0, 200),
+              });
+              reject(new BackendError('Invalid response format', statusCode, data));
+              return;
             }
+
+            logger.debug('Backend call successful', { statusCode });
+            resolve(parsed);
+          } catch (error) {
+            logger.error('Failed to parse backend response', error instanceof Error ? error : new Error(String(error)));
+            reject(
+              new BackendError(
+                `Failed to parse response: ${error instanceof Error ? error.message : 'Unknown'}`,
+                statusCode,
+                data,
+              ),
+            );
+          }
+        } else {
+          logger.error('Backend returned error status', {
+            statusCode,
+            body: data.substring(0, 200),
           });
-        });
-
-        req.on('error', (error: Error) => {
-          reject(new BackendError(`Network error: ${error.message}`));
-        });
-
-        req.on('timeout', () => {
-          req.destroy();
-          reject(new BackendError(`Request timeout after ${timeout}ms`));
-        });
-
-        req.end();
+          reject(new BackendError(`Backend error: ${statusCode}`, statusCode, data));
+        }
       });
+    });
 
-      // Mark span as successful
-      span.setStatus({ code: SpanStatusCode.OK });
-      return response;
-    } catch (error) {
-      // Record error in span
-      span.setStatus({
-        code: SpanStatusCode.ERROR,
-        message: error instanceof Error ? error.message : 'Unknown error',
-      });
+    req.on('error', (error: Error) => {
+      logger.error('Network error calling backend', error);
+      reject(new BackendError(`Network error: ${error.message}`));
+    });
 
-      if (error instanceof Error) {
-        span.recordException(error);
-      }
+    req.on('timeout', () => {
+      req.destroy();
+      logger.error('Backend call timed out', { timeout });
+      reject(new BackendError(`Timeout after ${timeout}ms`));
+    });
 
-      throw error;
-    } finally {
-      span.end();
-    }
+    req.end();
   });
 }

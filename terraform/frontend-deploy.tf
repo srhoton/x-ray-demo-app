@@ -26,8 +26,9 @@ resource "null_resource" "frontend_build" {
       VITE_APPSYNC_URL          = aws_appsync_graphql_api.main.uris["GRAPHQL"]
       VITE_APPSYNC_API_KEY      = aws_appsync_api_key.main.key
       VITE_AWS_REGION           = var.aws_region
-      VITE_RUM_APP_ID           = aws_rum_app_monitor.frontend.id
+      VITE_RUM_APP_ID           = aws_rum_app_monitor.frontend.app_monitor_id
       VITE_RUM_IDENTITY_POOL_ID = aws_cognito_identity_pool.rum.id
+      VITE_RUM_GUEST_ROLE_ARN   = aws_iam_role.rum_unauthenticated.arn
     }
   }
 

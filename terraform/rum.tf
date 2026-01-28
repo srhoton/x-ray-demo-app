@@ -11,11 +11,20 @@ resource "aws_rum_app_monitor" "frontend" {
     enable_xray         = true
     session_sample_rate = var.rum_session_sample_rate
     telemetries         = ["errors", "performance", "http"]
+    identity_pool_id    = aws_cognito_identity_pool.rum.id
+    guest_role_arn      = aws_iam_role.rum_unauthenticated.arn
 
     favorite_pages = [
       "/"
     ]
   }
+
+  # Ensure identity pool and role are created first
+  depends_on = [
+    aws_cognito_identity_pool.rum,
+    aws_iam_role.rum_unauthenticated,
+    aws_cognito_identity_pool_roles_attachment.rum
+  ]
 
   tags = merge(
     var.tags,
@@ -30,7 +39,7 @@ resource "aws_rum_app_monitor" "frontend" {
 resource "aws_cognito_identity_pool" "rum" {
   identity_pool_name               = "${var.project_name}-rum-pool"
   allow_unauthenticated_identities = true
-  allow_classic_flow               = false
+  allow_classic_flow               = true
 
   tags = merge(
     var.tags,

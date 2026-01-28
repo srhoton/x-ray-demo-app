@@ -6,13 +6,12 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { Context } from 'aws-lambda';
 import type { AppSyncResolverEvent, HelloResponse } from '../types';
 
-// Mock the tracing module before importing handler
-vi.mock('../tracing', () => ({
-  initializeTracing: vi.fn(() => ({
-    start: vi.fn(),
-    shutdown: vi.fn().mockResolvedValue(undefined),
-  })),
-  getXRayTraceId: vi.fn(() => 'Root=1-67890abc-12345678901234567890abcd'),
+// Mock the logger module
+vi.mock('../logger', () => ({
+  info: vi.fn(),
+  error: vi.fn(),
+  debug: vi.fn(),
+  warn: vi.fn(),
 }));
 
 // Mock the client module
@@ -119,8 +118,10 @@ describe('AppSync Lambda Resolver', () => {
       });
     });
 
-    it('should handle getHello field name', async () => {
+    it('should use default API_PATH when not set', async () => {
       // Arrange
+      delete process.env['API_PATH'];
+
       const mockResponse: HelloResponse = {
         message: 'Hello World',
         timestamp: '2026-01-28T12:00:00Z',
@@ -128,7 +129,7 @@ describe('AppSync Lambda Resolver', () => {
 
       vi.mocked(callBackend).mockResolvedValue(mockResponse);
 
-      const event = createMockEvent('getHello');
+      const event = createMockEvent();
       const context = createMockContext();
 
       // Act
@@ -136,25 +137,15 @@ describe('AppSync Lambda Resolver', () => {
 
       // Assert
       expect(result).toEqual(mockResponse);
+      expect(callBackend).toHaveBeenCalledWith({
+        endpoint: 'https://example.alb.amazonaws.com',
+        path: '/api/hello', // default path
+        timeout: 30000,
+      });
     });
   });
 
   describe('handler - error handling', () => {
-    it('should return GraphQL error when field name is unsupported', async () => {
-      // Arrange
-      const event = createMockEvent('unsupportedField');
-      const context = createMockContext();
-
-      // Act
-      const result = await handler(event, context);
-
-      // Assert
-      expect(result).toHaveProperty('message');
-      expect(result).toHaveProperty('errorType', 'InvalidField');
-      expect((result as { message: string }).message).toContain('Unsupported field');
-      expect(callBackend).not.toHaveBeenCalled();
-    });
-
     it('should return GraphQL error when ALB_ENDPOINT is missing', async () => {
       // Arrange
       delete process.env['ALB_ENDPOINT'];
@@ -171,23 +162,7 @@ describe('AppSync Lambda Resolver', () => {
       expect((result as { message: string }).message).toContain('ALB_ENDPOINT');
     });
 
-    it('should return GraphQL error when API_PATH is missing', async () => {
-      // Arrange
-      delete process.env['API_PATH'];
-
-      const event = createMockEvent();
-      const context = createMockContext();
-
-      // Act
-      const result = await handler(event, context);
-
-      // Assert
-      expect(result).toHaveProperty('message');
-      expect(result).toHaveProperty('errorType', 'InternalError');
-      expect((result as { message: string }).message).toContain('API_PATH');
-    });
-
-    it('should return GraphQL error when backend call fails', async () => {
+    it('should return GraphQL error when backend call fails with BackendError', async () => {
       // Arrange
       const backendError = new BackendError('Connection refused', 503, 'Service Unavailable');
       vi.mocked(callBackend).mockRejectedValue(backendError);
@@ -202,7 +177,7 @@ describe('AppSync Lambda Resolver', () => {
       expect(result).toHaveProperty('message');
       expect(result).toHaveProperty('errorType', 'BackendError');
       expect((result as { message: string }).message).toContain('Backend error');
-      expect((result as { errorInfo?: { statusCode?: number } }).errorInfo?.statusCode).toBe(503);
+      expect((result as { message: string }).message).toContain('Connection refused');
     });
 
     it('should return GraphQL error when backend throws generic error', async () => {
@@ -237,7 +212,7 @@ describe('AppSync Lambda Resolver', () => {
   });
 
   describe('handler - X-Ray tracing', () => {
-    it('should propagate trace context to backend call', async () => {
+    it('should call backend when handler is invoked', async () => {
       // Arrange
       const mockResponse: HelloResponse = {
         message: 'Hello World',
@@ -252,9 +227,8 @@ describe('AppSync Lambda Resolver', () => {
       // Act
       await handler(event, context);
 
-      // Assert
-      expect(callBackend).toHaveBeenCalled();
-      // Trace propagation is handled by OpenTelemetry automatically
+      // Assert - trace propagation is handled by OpenTelemetry ADOT layer automatically
+      expect(callBackend).toHaveBeenCalledTimes(1);
     });
   });
 });

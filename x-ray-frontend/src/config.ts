@@ -13,6 +13,7 @@ export interface AppConfig {
     applicationId: string;
     applicationVersion: string;
     identityPoolId: string;
+    guestRoleArn: string;
     region: string;
     sessionSampleRate: number;
     telemetries: string[];
@@ -20,21 +21,29 @@ export interface AppConfig {
   };
 }
 
+/**
+ * Get environment variable with fallback
+ */
+function getEnvVar(key: keyof ImportMetaEnv, fallback: string): string {
+  return import.meta.env[key] ?? fallback;
+}
+
 // These will be replaced by Terraform during build
 const config: AppConfig = {
   appsync: {
-    url:
-      import.meta.env.VITE_APPSYNC_URL ||
+    url: getEnvVar(
+      'VITE_APPSYNC_URL',
       'https://ju4yjdc2incctntbc3lvlq4fdi.appsync-api.us-west-2.amazonaws.com/graphql',
-    apiKey: import.meta.env.VITE_APPSYNC_API_KEY || '__PLACEHOLDER__',
-    region: import.meta.env.VITE_AWS_REGION || 'us-west-2',
+    ),
+    apiKey: getEnvVar('VITE_APPSYNC_API_KEY', '__PLACEHOLDER__'),
+    region: getEnvVar('VITE_AWS_REGION', 'us-west-2'),
   },
   rum: {
-    applicationId: import.meta.env.VITE_RUM_APP_ID || '__PLACEHOLDER__',
+    applicationId: getEnvVar('VITE_RUM_APP_ID', '__PLACEHOLDER__'),
     applicationVersion: '1.0.0',
-    identityPoolId:
-      import.meta.env.VITE_RUM_IDENTITY_POOL_ID || '__PLACEHOLDER__',
-    region: import.meta.env.VITE_AWS_REGION || 'us-west-2',
+    identityPoolId: getEnvVar('VITE_RUM_IDENTITY_POOL_ID', '__PLACEHOLDER__'),
+    guestRoleArn: getEnvVar('VITE_RUM_GUEST_ROLE_ARN', '__PLACEHOLDER__'),
+    region: getEnvVar('VITE_AWS_REGION', 'us-west-2'),
     sessionSampleRate: 1.0, // 100% sampling for demo
     telemetries: ['errors', 'performance', 'http'],
     enableXRay: true,

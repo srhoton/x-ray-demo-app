@@ -136,7 +136,7 @@ output "frontend_s3_bucket" {
 
 output "rum_app_monitor_id" {
   description = "CloudWatch RUM App Monitor ID"
-  value       = aws_rum_app_monitor.frontend.id
+  value       = aws_rum_app_monitor.frontend.app_monitor_id
 }
 
 output "rum_identity_pool_id" {

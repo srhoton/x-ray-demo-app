@@ -21,18 +21,30 @@ export function initializeRUM(): AwsRum | null {
   // Skip initialization if required config is missing
   if (
     config.rum.applicationId === '__PLACEHOLDER__' ||
-    config.rum.identityPoolId === '__PLACEHOLDER__'
+    config.rum.identityPoolId === '__PLACEHOLDER__' ||
+    config.rum.guestRoleArn === '__PLACEHOLDER__'
   ) {
     console.warn('CloudWatch RUM not initialized: missing configuration');
     return null;
   }
 
   try {
+    // Configure HTTP telemetry to add X-Ray trace headers to AppSync requests
+    const httpTelemetryConfig = {
+      urlsToInclude: [/appsync-api/],
+      addXRayTraceIdHeader: true,
+    };
+
     const rumConfig: AwsRumConfig = {
       sessionSampleRate: config.rum.sessionSampleRate,
       identityPoolId: config.rum.identityPoolId,
+      guestRoleArn: config.rum.guestRoleArn,
       endpoint: `https://dataplane.rum.${config.rum.region}.amazonaws.com`,
-      telemetries: config.rum.telemetries,
+      telemetries: [
+        'errors',
+        'performance',
+        ['http', httpTelemetryConfig],
+      ],
       allowCookies: true,
       enableXRay: config.rum.enableXRay,
     };
