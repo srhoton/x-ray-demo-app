@@ -1,0 +1,96 @@
+# Prompt History for Commit: Terraform AppSync Infrastructure
+
+## Original User Request
+> Create a folder called `x-ray-resolver` containing an AppSync Lambda resolver that will hit the ALB endpoint built previously. Infrastructure should be deployed via Terraform in the terraform/ directory.
+
+## Plan Reference
+- Components:
+  - AppSync GraphQL API Infrastructure
+  - Lambda Resolver Infrastructure
+- From Plan: ./sdlc-plan.md
+- Status: Approved
+
+## Implementation Details
+
+### AppSync GraphQL API (terraform/appsync.tf)
+- GraphQL API with schema defining Query.getHello returning HelloResponse
+- API key authentication (valid for 365 days)
+- X-Ray tracing enabled on AppSync API
+- CloudWatch logging with configurable log level (default: ALL)
+- IAM role for AppSync to write CloudWatch logs
+- IAM role for AppSync to invoke Lambda resolver
+- Lambda data source linking to resolver function
+- Direct Lambda resolver for getHello query field
+- CloudWatch log group with 7-day retention
+
+### Resolver Lambda Infrastructure (terraform/resolver-lambda.tf)
+- Build automation using npm install and npm run package
+- Lambda function with Node.js 20.x runtime
+- Deployment from x-ray-resolver/dist/function.zip
+- IAM execution role with policies:
+  - Basic execution (CloudWatch Logs)
+  - VPC execution
+  - X-Ray tracing (PutTraceSegments, PutTelemetryRecords)
+- VPC configuration using existing private subnets
+- Security group allowing outbound traffic
+- Environment variables:
+  - ALB_ENDPOINT: https://${alb_dns_name}
+  - API_PATH: /api/hello
+  - SERVICE_VERSION: 1.0.0
+  - OTEL_EXPORTER_OTLP_ENDPOINT: http://localhost:4317
+- X-Ray tracing mode: PassThrough (configurable)
+- Memory: 512 MB (configurable)
+- Timeout: 30 seconds (configurable)
+- CloudWatch log group with 7-day retention
+
+### Variables Added (terraform/variables.tf)
+- resolver_function_name: Lambda function name (default: x-ray-resolver)
+- resolver_memory_size: Memory allocation (default: 512 MB, range: 128-10240)
+- resolver_timeout: Timeout in seconds (default: 30, range: 1-900)
+- appsync_api_name: AppSync API name (default: x-ray-demo-api)
+- appsync_log_level: CloudWatch log level (default: ALL, options: NONE/ERROR/ALL)
+
+### Outputs Added (terraform/outputs.tf)
+- Resolver Lambda: function name, ARN, security group ID, log group
+- AppSync API: ID, URL, API key (sensitive), name
+
+## Key Technical Decisions
+1. Used Direct Lambda Resolver (not VTL templates) for simplicity
+2. Configured null_resource for automatic npm build before Lambda deployment
+3. Enabled X-Ray on both AppSync and Lambda for end-to-end tracing
+4. Used same VPC and private subnets as backend Lambda
+5. Configured ALB endpoint via environment variables for flexibility
+6. Set 7-day log retention to match existing backend Lambda
+7. Used PassThrough X-Ray mode to respect upstream sampling decisions
+
+## Integration Points
+- Resolver Lambda deployed in same VPC as backend Lambda
+- Uses existing private subnets (tier=private tag)
+- Connects to ALB via DNS name from data source
+- X-Ray trace context flows: AppSync → Resolver Lambda → ALB → Backend Lambda
+- All CloudWatch logs centralized with consistent retention
+
+## Validation
+- Terraform validate: Success ✓
+- Terraform fmt: All files formatted ✓
+- No syntax errors ✓
+- All resource dependencies properly defined ✓
+
+## Functional Review
+- Verified: Creates AppSync GraphQL API with correct schema ✓
+- Verified: Creates resolver Lambda with Node.js 20.x runtime ✓
+- Verified: Configures VPC networking correctly ✓
+- Verified: Sets up IAM roles and policies ✓
+- Verified: Enables X-Ray tracing on AppSync and Lambda ✓
+- Verified: Creates CloudWatch log groups ✓
+- Verified: Links AppSync to Lambda via data source ✓
+- Verified: Terraform validates successfully ✓
+
+## Code Quality Review
+- Follows Terraform best practices ✓
+- Proper use of variables with validation ✓
+- Descriptive resource names and tags ✓
+- Appropriate use of depends_on for ordering ✓
+- Outputs for key infrastructure components ✓
+- Comments explaining non-obvious decisions ✓
+- Consistent formatting via terraform fmt ✓
