@@ -21,23 +21,31 @@ dependencies {
     // Import Quarkus BOM
     implementation platform("${quarkusPlatformGroupId}:${quarkusPlatformArtifactId}:${quarkusPlatformVersion}")
 
-    // Quarkus core
+    // Quarkus core (CDI only - no REST since we use custom ALB handler)
     implementation 'io.quarkus:quarkus-arc'
-    implementation 'io.quarkus:quarkus-rest'
-    implementation 'io.quarkus:quarkus-rest-jackson'
 
-    // Quarkus Lambda
-    implementation 'io.quarkus:quarkus-amazon-lambda-http'
+    // Quarkus Lambda (raw Lambda extension for custom handlers)
+    // Quarkus CDI bootstraps automatically when using RequestHandler beans
+    implementation 'io.quarkus:quarkus-amazon-lambda'
 
-    // Quarkus OpenTelemetry for X-Ray
+    // AWS Lambda Events for ALB support
+    implementation 'com.amazonaws:aws-lambda-java-events:3.11.4'
+    implementation 'com.amazonaws:aws-lambda-java-core:1.2.3'
+
+    // Quarkus OpenTelemetry for X-Ray (Quarkus manages OTel SDK configuration)
     implementation 'io.quarkus:quarkus-opentelemetry'
     implementation 'io.opentelemetry:opentelemetry-exporter-otlp'
+
+    // AWS X-Ray OpenTelemetry contrib for X-Ray sampler and propagator
+    implementation 'io.opentelemetry.contrib:opentelemetry-aws-xray:1.39.0'
+    implementation 'io.opentelemetry.contrib:opentelemetry-aws-xray-propagator:1.39.0-alpha'
 
     // Logging
     implementation 'io.quarkus:quarkus-logging-json'
 
     // Testing
     testImplementation 'io.quarkus:quarkus-junit5'
+    testImplementation 'io.quarkus:quarkus-junit5-mockito'
     testImplementation 'io.rest-assured:rest-assured'
     testImplementation 'org.assertj:assertj-core:3.25.1'
 }

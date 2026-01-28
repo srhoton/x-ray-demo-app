@@ -1,0 +1,48 @@
+# Example Terraform Variables File
+# Copy this file to terraform.tfvars and customize for your environment
+
+# AWS Region
+aws_region = "us-west-2"
+
+# Environment name
+environment = "dev"
+
+# Project name (used for resource naming)
+project_name = "x-ray-demo"
+
+# Lambda Configuration
+lambda_function_name = "x-ray-backend"
+lambda_memory_size   = 1024
+lambda_timeout       = 60
+
+# Existing Infrastructure
+# Option 1: Provide ARNs directly
+# alb_arn          = "arn:aws:elasticloadbalancing:us-west-2:123456789012:loadbalancer/app/my-alb/abc123"
+# alb_listener_arn = "arn:aws:elasticloadbalancing:us-west-2:123456789012:listener/app/my-alb/abc123/def456"
+# vpc_id           = "vpc-xxxxxxxxxxxxx"
+
+# Option 2: Provide names/tags for lookup
+# alb_name = "my-existing-alb"
+# If vpc_id is not provided, will look for VPC with subnets tagged tier=private
+
+# ALB Listener Rule Configuration
+listener_rule_priority = 100
+api_path_pattern       = "/api/hello"
+
+# Health Check Configuration
+health_check_path                = "/api/hello"
+health_check_interval            = 30
+health_check_timeout             = 5
+health_check_healthy_threshold   = 2
+health_check_unhealthy_threshold = 2
+
+# X-Ray Tracing Configuration
+enable_xray_tracing = true
+xray_tracing_mode   = "PassThrough" # Options: "Active" or "PassThrough"
+
+# Additional Tags
+tags = {
+  Owner       = "DevOps Team"
+  CostCenter  = "Engineering"
+  Application = "X-Ray Demo"
+}

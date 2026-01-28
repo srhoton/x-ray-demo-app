@@ -1,0 +1,23 @@
+# Custom ADOT Collector configuration for Java Lambda
+# Receives OTLP traces and exports to AWS X-Ray
+# Note: ADOT Lambda extension has limited components - no batch processor
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: "localhost:4317"
+      http:
+        endpoint: "localhost:4318"
+
+exporters:
+  awsxray:
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      exporters: [awsxray]
+  telemetry:
+    logs:
+      level: info
