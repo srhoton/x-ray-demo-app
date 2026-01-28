@@ -1,0 +1,71 @@
+plugins {
+    id 'java'
+    id 'io.quarkus' version "${quarkusPluginVersion}"
+    id 'com.diffplug.spotless' version '6.25.0'
+}
+
+group = 'com.example.xray'
+version = '1.0.0-SNAPSHOT'
+
+repositories {
+    mavenCentral()
+    mavenLocal()
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_21
+    targetCompatibility = JavaVersion.VERSION_21
+}
+
+dependencies {
+    // Import Quarkus BOM
+    implementation platform("${quarkusPlatformGroupId}:${quarkusPlatformArtifactId}:${quarkusPlatformVersion}")
+
+    // Quarkus core
+    implementation 'io.quarkus:quarkus-arc'
+    implementation 'io.quarkus:quarkus-rest'
+    implementation 'io.quarkus:quarkus-rest-jackson'
+
+    // Quarkus Lambda
+    implementation 'io.quarkus:quarkus-amazon-lambda-http'
+
+    // Quarkus OpenTelemetry for X-Ray
+    implementation 'io.quarkus:quarkus-opentelemetry'
+    implementation 'io.opentelemetry:opentelemetry-exporter-otlp'
+
+    // Logging
+    implementation 'io.quarkus:quarkus-logging-json'
+
+    // Testing
+    testImplementation 'io.quarkus:quarkus-junit5'
+    testImplementation 'io.rest-assured:rest-assured'
+    testImplementation 'org.assertj:assertj-core:3.25.1'
+}
+
+tasks.withType(JavaCompile) {
+    options.encoding = 'UTF-8'
+    options.compilerArgs << '-parameters'
+}
+
+test {
+    useJUnitPlatform()
+    systemProperty 'java.util.logging.manager', 'org.jboss.logmanager.LogManager'
+}
+
+spotless {
+    java {
+        googleJavaFormat('1.19.1')
+        importOrder 'java', 'javax', 'jakarta', 'io', 'org', 'com', ''
+        removeUnusedImports()
+        trimTrailingWhitespace()
+        endWithNewline()
+
+        // Target all Java files
+        target 'src/**/*.java'
+    }
+}
+
+// Ensure spotless runs before compilation
+tasks.named('compileJava') {
+    dependsOn 'spotlessApply'
+}
