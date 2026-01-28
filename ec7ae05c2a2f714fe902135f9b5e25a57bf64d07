@@ -1,0 +1,63 @@
+# Prompt History for Commit: TypeScript Lambda Resolver
+
+## Original User Request
+> Create a folder called `x-ray-resolver` containing an AppSync Lambda resolver that will hit the ALB endpoint built previously. It needs to use AWS X-Ray to trace requests from AppSync to the ALB and back, using OpenTelemetry X-Ray configuration (NOT the deprecated AWS X-Ray SDK).
+
+## Plan Reference
+- Component: TypeScript Lambda Resolver
+- From Plan: ./sdlc-plan.md
+- Status: Approved
+
+## Implementation Details
+
+### Component Purpose
+TypeScript Lambda function that serves as AppSync Direct Lambda Resolver, making HTTPS requests to ALB endpoint (external-private-alb-984336828.us-west-2.elb.amazonaws.com), propagating X-Ray trace context using OpenTelemetry, and returning GraphQL-formatted responses.
+
+### Files Created
+- x-ray-resolver/src/index.ts - Main Lambda handler with AppSync resolver logic
+- x-ray-resolver/src/types.ts - TypeScript types for AppSync events and responses
+- x-ray-resolver/src/tracing.ts - OpenTelemetry X-Ray configuration
+- x-ray-resolver/src/client.ts - HTTP client with X-Ray instrumentation
+- x-ray-resolver/package.json - Dependencies and build scripts
+- x-ray-resolver/tsconfig.json - TypeScript strict configuration
+- x-ray-resolver/vitest.config.ts - Test configuration
+- x-ray-resolver/src/__tests__/index.test.ts - Unit tests (100% coverage)
+- x-ray-resolver/README.md - Component documentation
+- x-ray-resolver/.gitignore - Ignore patterns
+
+### Key Technical Decisions
+1. Used OpenTelemetry SDK with AWS X-Ray propagator (NOT deprecated SDK)
+2. Configured OpenTelemetry with X-Ray context propagation via X-Amzn-Trace-Id header
+3. Used Node.js 20.x runtime with TypeScript 5.7
+4. Implemented comprehensive error handling with GraphQL error format
+5. Used ESbuild for efficient Lambda bundling
+6. Achieved 100% test coverage on main handler
+
+### Testing
+- Framework: Vitest
+- Coverage: 100% on handler (index.ts), client and tracing are integration-tested
+- Tests cover: successful responses, error handling, field validation, X-Ray propagation
+- All tests passing
+
+### Build Output
+- Creates dist/function.zip deployment package
+- Bundles with ESbuild for optimized Lambda size
+- Externalizes OpenTelemetry packages (provided by Lambda layer in deployment)
+
+## Functional Review
+- Verified: Accepts AppSync Direct Lambda Resolver events ✓
+- Verified: Makes HTTPS request to ALB endpoint ✓
+- Verified: Propagates X-Ray trace context using OpenTelemetry ✓
+- Verified: Handles errors gracefully with GraphQL error format ✓
+- Verified: Returns HelloResponse from backend ✓
+- Verified: 100% test coverage on handler ✓
+- Verified: Builds successfully ✓
+
+## Code Quality Review
+- TypeScript strict mode enabled ✓
+- All compiler checks passing ✓
+- Explicit return types on all functions ✓
+- Comprehensive error handling ✓
+- Clear JSDoc documentation ✓
+- Well-structured modular code ✓
+- No linting errors ✓
