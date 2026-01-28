@@ -13,13 +13,9 @@ resource "null_resource" "build_lambda" {
   }
 }
 
-# Archive the Lambda deployment package
-data "archive_file" "lambda_zip" {
-  type        = "zip"
-  source_dir  = "${path.module}/../x-ray-backend/build/quarkus-app"
-  output_path = "${path.module}/lambda-deployment.zip"
-
-  depends_on = [null_resource.build_lambda]
+# Use the Quarkus-generated function.zip for Lambda deployment
+locals {
+  lambda_zip_path = "${path.module}/../x-ray-backend/build/function.zip"
 }
 
 # IAM role for Lambda execution
@@ -80,16 +76,29 @@ resource "aws_iam_role_policy" "lambda_xray" {
   })
 }
 
+# AWS Distro for OpenTelemetry (ADOT) Lambda Collector layer ARN
+# This layer provides an OTel collector sidecar that receives OTLP and exports to X-Ray
+# See: https://aws-otel.github.io/docs/getting-started/lambda
+locals {
+  # ADOT Collector layer ARN for us-west-2 (x86_64)
+  adot_collector_layer_arn = "arn:aws:lambda:${var.aws_region}:901920570463:layer:aws-otel-collector-amd64-ver-0-102-1:1"
+}
+
 # Lambda function
 resource "aws_lambda_function" "backend" {
-  filename         = data.archive_file.lambda_zip.output_path
-  function_name    = var.lambda_function_name
-  role             = aws_iam_role.lambda_execution.arn
+  filename      = local.lambda_zip_path
+  function_name = var.lambda_function_name
+  role          = aws_iam_role.lambda_execution.arn
+  # Use Quarkus Amazon Lambda Stream handler for HTTP/ALB integration
+  # This properly bootstraps Quarkus CDI/OpenTelemetry and handles ALB request/response format
   handler          = "io.quarkus.amazon.lambda.runtime.QuarkusStreamHandler::handleRequest"
-  source_code_hash = data.archive_file.lambda_zip.output_base64sha256
+  source_code_hash = filebase64sha256(local.lambda_zip_path)
   runtime          = "java21"
   memory_size      = var.lambda_memory_size
   timeout          = var.lambda_timeout
+
+  # Add ADOT Collector layer for receiving OTLP and exporting to X-Ray
+  layers = var.enable_xray_tracing ? [local.adot_collector_layer_arn] : []
 
   vpc_config {
     subnet_ids         = data.aws_subnets.private.ids
@@ -98,11 +107,22 @@ resource "aws_lambda_function" "backend" {
 
   environment {
     variables = {
-      QUARKUS_PROFILE             = "prod"
-      OTEL_EXPORTER_OTLP_ENDPOINT = "http://localhost:2000"
-      OTEL_TRACES_SAMPLER         = "xray"
-      OTEL_PROPAGATORS            = "tracecontext,baggage,xray"
+      QUARKUS_PROFILE = "prod"
+      # Custom ADOT collector configuration for receiving OTLP traces
+      # The collector.yaml is bundled in the Lambda deployment package
+      OPENTELEMETRY_COLLECTOR_CONFIG_FILE = "/var/task/collector.yaml"
+      # OpenTelemetry configuration - Quarkus handles SDK initialization
+      # ADOT collector listens on localhost:4317
+      OTEL_EXPORTER_OTLP_ENDPOINT = "http://localhost:4317"
+      OTEL_EXPORTER_OTLP_PROTOCOL = "grpc"
+      OTEL_SERVICE_NAME           = var.lambda_function_name
       OTEL_RESOURCE_ATTRIBUTES    = "service.name=${var.lambda_function_name},service.version=1.0.0,cloud.provider=aws,cloud.platform=aws_lambda"
+      # Disable metrics and logs export (only traces via ADOT)
+      OTEL_METRICS_EXPORTER = "none"
+      OTEL_LOGS_EXPORTER    = "none"
+      # Enable OpenTelemetry Java auto-configuration
+      JAVA_TOOL_OPTIONS                      = "-Dotel.java.global-autoconfigure.enabled=true"
+      OTEL_JAVA_GLOBAL_AUTOCONFIGURE_ENABLED = "true"
     }
   }
 

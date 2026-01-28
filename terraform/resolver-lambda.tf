@@ -98,16 +98,25 @@ resource "aws_security_group" "resolver" {
   )
 }
 
+# ADOT Node.js auto-instrumentation layer ARN
+# This layer automatically instruments https.request() calls and exports to X-Ray
+locals {
+  resolver_adot_layer_arn = "arn:aws:lambda:${var.aws_region}:901920570463:layer:aws-otel-nodejs-amd64-ver-1-18-1:4"
+}
+
 # Resolver Lambda function
 resource "aws_lambda_function" "resolver" {
   filename         = local.resolver_zip_path
   function_name    = var.resolver_function_name
   role             = aws_iam_role.resolver_execution.arn
-  handler          = "index.handler"
+  handler          = "wrapper.handler"
   source_code_hash = filebase64sha256(local.resolver_zip_path)
   runtime          = "nodejs20.x"
   memory_size      = var.resolver_memory_size
   timeout          = var.resolver_timeout
+
+  # Add ADOT Collector layer for receiving OTLP and exporting to X-Ray
+  layers = var.enable_xray_tracing ? [local.resolver_adot_layer_arn] : []
 
   vpc_config {
     subnet_ids         = data.aws_subnets.private.ids
@@ -116,10 +125,12 @@ resource "aws_lambda_function" "resolver" {
 
   environment {
     variables = {
-      ALB_ENDPOINT                = "https://${data.aws_lb.existing_by_name[0].dns_name}"
-      API_PATH                    = var.api_path_pattern
-      SERVICE_VERSION             = "1.0.0"
-      OTEL_EXPORTER_OTLP_ENDPOINT = "http://localhost:4317"
+      ALB_ENDPOINT    = "https://${local.alb_dns_name}"
+      API_PATH        = var.api_path_pattern
+      SERVICE_VERSION = "1.0.0"
+      # ADOT auto-instrumentation wrapper
+      AWS_LAMBDA_EXEC_WRAPPER = "/opt/otel-handler"
+      OTEL_SERVICE_NAME       = var.resolver_function_name
     }
   }
 

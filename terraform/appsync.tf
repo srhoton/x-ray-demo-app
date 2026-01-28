@@ -151,13 +151,24 @@ resource "aws_appsync_resolver" "get_hello" {
   data_source = aws_appsync_datasource.resolver_lambda.name
   kind        = "UNIT"
 
-  # Direct Lambda invocation - no request/response templates needed
-  # AppSync will pass the event directly to Lambda
+  # Map AppSync context to the Lambda event structure
   request_template = <<EOF
 {
   "version": "2018-05-29",
   "operation": "Invoke",
-  "payload": $util.toJson($context)
+  "payload": {
+    "typeName": $util.toJson($context.info.parentTypeName),
+    "fieldName": $util.toJson($context.info.fieldName),
+    "arguments": $util.toJson($context.arguments),
+    "identity": $util.toJson($context.identity),
+    "source": $util.toJson($context.source),
+    "request": {
+      "headers": $util.toJson($context.request.headers),
+      "domainName": $util.toJson($context.request.domainName)
+    },
+    "prev": $util.toJson($context.prev),
+    "stash": $util.toJson($context.stash)
+  }
 }
 EOF
 

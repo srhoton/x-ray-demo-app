@@ -182,3 +182,27 @@ variable "tags" {
   type        = map(string)
   default     = {}
 }
+
+# Frontend configuration variables
+variable "frontend_domain" {
+  description = "Full domain name for the frontend (e.g., xray.sb.fullbay.com)"
+  type        = string
+  default     = "xray.sb.fullbay.com"
+}
+
+variable "frontend_base_domain" {
+  description = "Base domain name for Route53 zone lookup (e.g., sb.fullbay.com)"
+  type        = string
+  default     = "sb.fullbay.com"
+}
+
+variable "rum_session_sample_rate" {
+  description = "CloudWatch RUM session sample rate (0.0 to 1.0)"
+  type        = number
+  default     = 1.0
+
+  validation {
+    condition     = var.rum_session_sample_rate >= 0.0 && var.rum_session_sample_rate <= 1.0
+    error_message = "RUM session sample rate must be between 0.0 and 1.0."
+  }
+}

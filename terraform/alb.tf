@@ -6,6 +6,7 @@ resource "aws_lb_target_group" "lambda" {
   target_type = "lambda"
 
   # Health check configuration for Lambda target
+  # Note: protocol should not be specified for lambda target type
   health_check {
     enabled             = true
     path                = var.health_check_path

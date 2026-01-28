@@ -112,3 +112,34 @@ output "appsync_api_name" {
   description = "Name of the AppSync GraphQL API"
   value       = aws_appsync_graphql_api.main.name
 }
+
+# Frontend outputs
+output "frontend_url" {
+  description = "Frontend application URL"
+  value       = "https://${var.frontend_domain}"
+}
+
+output "frontend_cloudfront_distribution_id" {
+  description = "CloudFront distribution ID for the frontend"
+  value       = aws_cloudfront_distribution.frontend.id
+}
+
+output "frontend_cloudfront_domain" {
+  description = "CloudFront distribution domain name"
+  value       = aws_cloudfront_distribution.frontend.domain_name
+}
+
+output "frontend_s3_bucket" {
+  description = "S3 bucket name for frontend static files"
+  value       = aws_s3_bucket.frontend.id
+}
+
+output "rum_app_monitor_id" {
+  description = "CloudWatch RUM App Monitor ID"
+  value       = aws_rum_app_monitor.frontend.id
+}
+
+output "rum_identity_pool_id" {
+  description = "Cognito Identity Pool ID for RUM"
+  value       = aws_cognito_identity_pool.rum.id
+}

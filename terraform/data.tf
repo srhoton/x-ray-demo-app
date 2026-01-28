@@ -44,10 +44,13 @@ data "aws_lb" "existing_by_name" {
   name  = var.alb_name
 }
 
-# Get ALB ARN from either data source
+# Get ALB ARN and DNS name from either data source
 locals {
   alb_arn = var.alb_arn != "" ? data.aws_lb.existing_by_arn[0].arn : (
     var.alb_name != "" ? data.aws_lb.existing_by_name[0].arn : ""
+  )
+  alb_dns_name = var.alb_arn != "" ? data.aws_lb.existing_by_arn[0].dns_name : (
+    var.alb_name != "" ? data.aws_lb.existing_by_name[0].dns_name : ""
   )
 }
 
@@ -69,3 +72,9 @@ locals {
 data "aws_caller_identity" "current" {}
 
 data "aws_region" "current" {}
+
+# Look up Route53 hosted zone for frontend domain
+data "aws_route53_zone" "domain" {
+  name         = var.frontend_base_domain
+  private_zone = false
+}
