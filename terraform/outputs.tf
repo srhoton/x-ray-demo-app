@@ -69,3 +69,46 @@ output "xray_tracing_mode" {
   description = "X-Ray tracing mode"
   value       = var.enable_xray_tracing ? var.xray_tracing_mode : "Disabled"
 }
+
+# AppSync Resolver Lambda outputs
+output "resolver_function_name" {
+  description = "Name of the AppSync resolver Lambda function"
+  value       = aws_lambda_function.resolver.function_name
+}
+
+output "resolver_function_arn" {
+  description = "ARN of the AppSync resolver Lambda function"
+  value       = aws_lambda_function.resolver.arn
+}
+
+output "resolver_security_group_id" {
+  description = "ID of the resolver Lambda security group"
+  value       = aws_security_group.resolver.id
+}
+
+output "resolver_log_group" {
+  description = "CloudWatch Log Group name for resolver Lambda"
+  value       = aws_cloudwatch_log_group.resolver.name
+}
+
+# AppSync API outputs
+output "appsync_api_id" {
+  description = "ID of the AppSync GraphQL API"
+  value       = aws_appsync_graphql_api.main.id
+}
+
+output "appsync_api_url" {
+  description = "URL of the AppSync GraphQL API"
+  value       = aws_appsync_graphql_api.main.uris["GRAPHQL"]
+}
+
+output "appsync_api_key" {
+  description = "API key for the AppSync API (sensitive)"
+  value       = aws_appsync_api_key.main.key
+  sensitive   = true
+}
+
+output "appsync_api_name" {
+  description = "Name of the AppSync GraphQL API"
+  value       = aws_appsync_graphql_api.main.name
+}

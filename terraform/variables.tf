@@ -132,6 +132,51 @@ variable "xray_tracing_mode" {
   }
 }
 
+variable "resolver_function_name" {
+  description = "Name of the AppSync resolver Lambda function"
+  type        = string
+  default     = "x-ray-resolver"
+}
+
+variable "resolver_memory_size" {
+  description = "Amount of memory in MB for resolver Lambda function"
+  type        = number
+  default     = 512
+
+  validation {
+    condition     = var.resolver_memory_size >= 128 && var.resolver_memory_size <= 10240
+    error_message = "Lambda memory must be between 128 MB and 10240 MB."
+  }
+}
+
+variable "resolver_timeout" {
+  description = "Resolver Lambda function timeout in seconds"
+  type        = number
+  default     = 30
+
+  validation {
+    condition     = var.resolver_timeout >= 1 && var.resolver_timeout <= 900
+    error_message = "Lambda timeout must be between 1 and 900 seconds."
+  }
+}
+
+variable "appsync_api_name" {
+  description = "Name of the AppSync GraphQL API"
+  type        = string
+  default     = "x-ray-demo-api"
+}
+
+variable "appsync_log_level" {
+  description = "AppSync field log level"
+  type        = string
+  default     = "ALL"
+
+  validation {
+    condition     = contains(["NONE", "ERROR", "ALL"], var.appsync_log_level)
+    error_message = "Log level must be one of: NONE, ERROR, ALL."
+  }
+}
+
 variable "tags" {
   description = "Additional tags to apply to resources"
   type        = map(string)
